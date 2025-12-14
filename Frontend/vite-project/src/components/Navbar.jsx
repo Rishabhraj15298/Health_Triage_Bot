@@ -22,7 +22,7 @@ export default function Navbar() {
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
               <Zap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">HealthAI</span>
+            <span className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">Vaidya</span>
           </div>
 
           {/* Desktop Links */}

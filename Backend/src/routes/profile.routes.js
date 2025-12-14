@@ -4,7 +4,8 @@ import {
   upsertProfile,
   getProfile,
   upsertMedicalHistory,
-  generateSummary
+  generateSummary,
+  getSbarReports
 } from "../controller/profile.controller.js";
 
 const router = express.Router();
@@ -36,5 +37,12 @@ router.post("/medical", requireAuth(), upsertMedicalHistory);
  * @access  Private
  */
 router.post("/generate-summary", requireAuth(), generateSummary);
+
+/**
+ * @route   GET /api/profile/reports
+ * @desc    Get user's SBAR reports
+ * @access  Private
+ */
+router.get("/reports", requireAuth(), getSbarReports);
 
 export default router;

@@ -142,10 +142,14 @@ export const upsertMedicalHistory = async (req, res) => {
  * @route POST /api/profile/generate-summary
  * @access Private
  */
+import SbarReport from "../models/sbarReport.model.js";
+import Document from "../models/document.model.js";
+
 export const generateSummary = async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
     const profile = await Profile.findOne({ clerkUserId });
+    const documents = await Document.find({ clerkUserId });
 
     if (!profile) {
       return res.status(404).json({
@@ -154,55 +158,108 @@ export const generateSummary = async (req, res) => {
       });
     }
 
+    // Prepare Documents Context
+    const documentsContext = documents.map(doc => `
+      - Document Type: ${doc.documentType}
+      - Title: ${doc.title}
+      - Date: ${doc.reportDate ? new Date(doc.reportDate).toLocaleDateString() : "N/A"}
+      - Extracted Text/Summary: ${doc.aiSummary || doc.extractedText || "No text content availble"}
+    `).join("\n");
+
     // Initialize Gemini
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // Use gemini-flash-latest as confirmed working
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-    // Construct Prompt
+    // Construct Prompt for SBAR Format
     const prompt = `
-      Act as a professional medical assistant. Analyze the following patient health profile and generate a comprehensive, easy-to-read health summary.
-      
-      Patient Name: ${profile.fullName}
-      Age: ${new Date().getFullYear() - new Date(profile.dateOfBirth).getFullYear()}
+      Act as a professional medical assistant preparing a clinical handover for a physician. 
+      Analyze the patient's health profile and their uploaded medical documents to generate a "Doctor Handover" report using the SBAR (Situation, Background, Assessment, Recommendation) format.
+
+      PATIENT PROFILE:
+      Name: ${profile.fullName}
+      Age: ${profile.dateOfBirth ? new Date().getFullYear() - new Date(profile.dateOfBirth).getFullYear() : "Unknown"}
       Gender: ${profile.gender}
       Blood Group: ${profile.bloodGroup || "Not recorded"}
-      Height: ${profile.heightCm || "N/A"} cm
-      Weight: ${profile.weightKg || "N/A"} kg
+      Height/Weight: ${profile.heightCm || "?"}cm / ${profile.weightKg || "?"}kg
       
-      Medical History:
+      MEDICAL HISTORY:
       - Allergies: ${profile.allergies?.join(", ") || "None"}
-      - Current Medications: ${profile.currentMedications?.join(", ") || "None"}
-      - Chronic Conditions: ${profile.chronicConditions?.join(", ") || "None"}
-      - Past Surgeries: ${profile.pastSurgeries?.join(", ") || "None"}
-      - Family History: ${profile.familyHistory || "None"}
+      - Current Meds: ${profile.currentMedications?.join(", ") || "None"}
+      - Conditions: ${profile.chronicConditions?.join(", ") || "None"}
+      - Surgeries: ${profile.pastSurgeries?.join(", ") || "None"}
       
-      Lifestyle:
-      - Smoking: ${profile.smokingStatus || "Unknown"}
-      - Alcohol: ${profile.alcoholConsumption || "Unknown"}
-      - Exercise: ${profile.exerciseFrequency || "Unknown"}
-      
-      Please provide:
-      1. A brief health overview.
-      2. Key risk factors based on lifestyle and history.
-      3. Specific recommendations for preventative care.
-      4. Questions they should ask their doctor.
-      
-      Format the output in clean, readable text with clear headings. Do not use markdown symbols like ** or #, just use plain text formatting with newlines.
+      RECENT MEDICAL DOCUMENTS & REPORTS:
+      ${documentsContext || "No recent documents available."}
+
+      OUTPUT FORMAT INSTRUCTIONS:
+      Generate the response strictly in the following SBAR format. Do not use markdown (no **, #). Use uppercase labels followed by a colon for sections.
+
+      SITUATION:
+      [State the patient's name, age, gender, and the primary reason for this summary based on recent reports or conditions. Keep it concise.]
+
+      BACKGROUND:
+      [Summarize pertinent medical history, allergies, current medications, and significant lifestyle factors. Mention recent procedures or labs found in documents.]
+
+      ASSESSMENT:
+      [Synthesize the data from the documents and history. Identify potential issues, risk factors (like abnormal lab results if any), or stability of chronic conditions. If reports are normal, state that.]
+
+      RECOMMENDATION:
+      [Suggest specific actions for the doctor (e.g., "Review blood pressure medication," "Follow up on elevated lipids"). Include preventative care questions the patient should ask.]
+
+      Ensure the tone is professional, clinical, and suitable for a doctor to read quickly.
     `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const summary = response.text();
 
+    // SAVE THE REPORT TO DB
+    const newReport = await SbarReport.create({
+      clerkUserId,
+      reportContent: summary,
+      includedDocumentsCount: documents.length
+    });
+
     return res.status(200).json({
       success: true,
-      summary
+      summary,
+      reportId: newReport._id
     });
   } catch (error) {
     console.error("Generate Summary Error:", error);
+    console.error("Error Name:", error.name);
+    console.error("Error Message:", error.message);
+    
     return res.status(500).json({
       success: false,
-      message: "Failed to generate summary. Please ensure GEMINI_API_KEY is set."
+      message: `Failed to generate summary: ${error.message}`
+    });
+  }
+};
+
+/**
+ * @desc Get User's SBAR Reports
+ * @route GET /api/profile/reports
+ * @access Private
+ */
+export const getSbarReports = async (req, res) => {
+  try {
+    const clerkUserId = req.auth.userId;
+    
+    // Fetch reports, sorted by newest first
+    const reports = await SbarReport.find({ clerkUserId })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: reports
+    });
+  } catch (error) {
+    console.error("Get SBAR Reports Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch reports"
     });
   }
 };

@@ -5,53 +5,88 @@ import Document from "../models/document.model.js"
  * @route POST /api/documents/upload
  * @access Private
  */
-export const uploadDocument = async (req, res) => {
-  try {
-    const clerkUserId = req.auth.userId;
+  import { GoogleGenerativeAI } from "@google/generative-ai";
 
-    if (!req.file) {
-      return res.status(400).json({
+  export const uploadDocument = async (req, res) => {
+    try {
+      const clerkUserId = req.auth.userId;
+  
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "No file uploaded"
+        });
+      }
+  
+      const { originalname, mimetype, size, buffer } = req.file;
+      const base64String = buffer.toString('base64');
+      const fileUrl = `data:${mimetype};base64,${base64String}`;
+  
+      let schemaFileType = "other";
+      if (mimetype.includes("pdf")) schemaFileType = "pdf";
+      else if (mimetype.includes("image")) schemaFileType = "image";
+  
+      // 1. Create initial document record
+      const document = await Document.create({
+        clerkUserId,
+        title: originalname,
+        documentType: "other",
+        fileUrl,
+        fileType: schemaFileType,
+        fileSize: size,
+        reportDate: new Date(),
+        processingStatus: "processing" // Set to processing initially
+      });
+  
+      // 2. Process with Gemini for Text Extraction & Summary
+      // run in background (don't await) or await if fast enough. 
+      // For better UX, we'll await it to ensure data is ready for the summary generator immediately.
+      try {
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        // Use gemini-flash-latest as confirmed working
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+  
+        const prompt = "Analyze this medical document. 1. Extract the full text. 2. Provide a concise medical summary including any diagnosis, medications, or test results.";
+        
+        const imagePart = {
+          inlineData: {
+            data: base64String,
+            mimeType: mimetype
+          },
+        };
+  
+        const result = await model.generateContent([prompt, imagePart]);
+        const response = await result.response;
+        const textResponse = response.text();
+  
+        // Simple heuristic to split summary and extraction (Gemini often combines them)
+        // For now, we'll store the full AI response in both or split if possible.
+        // Let's store the full detailed response in extractedText and a truncated version in summary
+        document.extractedText = textResponse; 
+        document.aiSummary = textResponse.substring(0, 500) + "..."; // First 500 chars as quick summary
+        document.processingStatus = "completed";
+        await document.save();
+        
+      } catch (aiError) {
+        console.error("AI Processing Error:", aiError);
+        document.processingStatus = "failed";
+        await document.save();
+        // We continue without failing the upload, user just won't have auto-extraction
+      }
+  
+      return res.status(201).json({
+        success: true,
+        message: "Document uploaded and processed successfully",
+        data: document
+      });
+    } catch (error) {
+      console.error("Upload Document Error:", error);
+      return res.status(500).json({
         success: false,
-        message: "No file uploaded"
+        message: `Failed to upload document: ${error.message}`
       });
     }
-
-    const { originalname, mimetype, size, buffer } = req.file;
-    
-    // Convert buffer to base64 data URI for storage
-    // In production, upload to S3/Cloudinary and get URL
-    const base64String = buffer.toString('base64');
-    const fileUrl = `data:${mimetype};base64,${base64String}`;
-
-    // Map mimetype to schema enum
-    let schemaFileType = "other";
-    if (mimetype.includes("pdf")) schemaFileType = "pdf";
-    else if (mimetype.includes("image")) schemaFileType = "image";
-
-    const document = await Document.create({
-      clerkUserId,
-      title: originalname,
-      documentType: "other", // Default to 'other' to match enum
-      fileUrl,
-      fileType: schemaFileType, // Use mapped type
-      fileSize: size,
-      reportDate: new Date(),
-      processingStatus: "uploaded"
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Document uploaded successfully",
-      data: document
-    });
-  } catch (error) {
-    console.error("Upload Document Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: `Failed to upload document: ${error.message}`
-    });
-  }
-};
+  };
 
 /**
  * @desc Get all documents of logged-in user
