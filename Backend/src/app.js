@@ -7,6 +7,8 @@ import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import profileRoutes from "./routes/profile.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import chatbotRoutes from "./routes/chatbot.routes.js";
+import appointmentRoutes from "./routes/appointment.routes.js";
+import riskRoutes from "./routes/risk.routes.js";
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.get("/", (req, res) => {
 app.use("/api/profile", profileRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/appointments", appointmentRoutes);
+app.use("/api/risk", riskRoutes);
 
 // 404 Handler (must be after all routes)
 app.use(notFound);

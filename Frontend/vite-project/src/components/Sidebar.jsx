@@ -1,4 +1,4 @@
-import { User, MessageSquare, Calendar, LogOut, FileText, Home } from "lucide-react";
+import { User, MessageSquare, Calendar, LogOut, FileText, Home, Activity } from "lucide-react";
 import { useClerk } from "@clerk/clerk-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -11,6 +11,7 @@ export default function Sidebar() {
     { icon: User, label: "Profile", path: "/dashboard/profile" },
     { icon: FileText, label: "Documents", path: "/dashboard/documents" },
     { icon: MessageSquare, label: "Bot", path: "/dashboard/chatbot" },
+    { icon: Activity, label: "Test Risk Score", path: "/dashboard/risk-assessment" },
     { icon: Calendar, label: "Calendar", path: "/dashboard/calendar" },
   ];
 
@@ -38,21 +39,19 @@ export default function Sidebar() {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
-          
+
           return (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 group ${
-                active
-                  ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]"
-                  : "text-gray-400 hover:bg-white/5 hover:text-white"
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 group ${active
+                ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]"
+                : "text-gray-400 hover:bg-white/5 hover:text-white"
+                }`}
             >
               <Icon
-                className={`w-5 h-5 transition-transform duration-300 ${
-                  active ? "scale-110" : "group-hover:scale-110"
-                }`}
+                className={`w-5 h-5 transition-transform duration-300 ${active ? "scale-110" : "group-hover:scale-110"
+                  }`}
               />
               <span className="font-medium">{item.label}</span>
             </button>
@@ -70,7 +69,7 @@ export default function Sidebar() {
           <Home className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span className="font-medium">Back to Home</span>
         </button>
-        
+
         {/* Logout Button */}
         <button
           onClick={handleSignOut}

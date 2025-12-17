@@ -1,29 +1,15 @@
-import { useState } from "react";
-import { Calendar as CalendarIcon, Clock, Plus, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Calendar as CalendarIcon, Clock, Plus, X, Loader2 } from "lucide-react";
+import { useAuth } from "@clerk/clerk-react";
 
 export default function Calendar() {
-  const [appointments, setAppointments] = useState([
-    {
-      id: 1,
-      title: "Annual Checkup",
-      doctor: "Dr. Sarah Johnson",
-      date: "2024-12-20",
-      time: "10:00 AM",
-      type: "In-Person",
-      status: "Confirmed",
-    },
-    {
-      id: 2,
-      title: "Follow-up Consultation",
-      doctor: "Dr. Michael Chen",
-      date: "2024-12-25",
-      time: "2:30 PM",
-      type: "Tele-Consult",
-      status: "Pending",
-    },
-  ]);
+  const { getToken } = useAuth();
+  const [appointments, setAppointments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
     title: "",
     doctor: "",
@@ -32,34 +18,98 @@ export default function Calendar() {
     type: "In-Person",
   });
 
-  const handleAddAppointment = () => {
+  const fetchAppointments = async () => {
+    try {
+      setIsLoading(true);
+      const token = await getToken();
+      const response = await fetch("http://localhost:5000/api/appointments", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch appointments");
+      }
+
+      const data = await response.json();
+      setAppointments(data.data || []);
+    } catch (err) {
+      console.error("Error fetching appointments:", err);
+      setError("Failed to load appointments");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const handleAddAppointment = async () => {
     if (
       newAppointment.title &&
       newAppointment.doctor &&
       newAppointment.date &&
       newAppointment.time
     ) {
-      setAppointments([
-        ...appointments,
-        {
-          ...newAppointment,
-          id: appointments.length + 1,
-          status: "Pending",
-        },
-      ]);
-      setNewAppointment({
-        title: "",
-        doctor: "",
-        date: "",
-        time: "",
-        type: "In-Person",
-      });
-      setShowAddModal(false);
+      try {
+        setIsSubmitting(true);
+        const token = await getToken();
+        const response = await fetch("http://localhost:5000/api/appointments", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newAppointment),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create appointment");
+        }
+
+        const data = await response.json();
+        setAppointments((prev) => [...prev, data.data]);
+
+        setNewAppointment({
+          title: "",
+          doctor: "",
+          date: "",
+          time: "",
+          type: "In-Person",
+        });
+        setShowAddModal(false);
+      } catch (err) {
+        console.error("Error creating appointment:", err);
+        alert("Failed to schedule appointment. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const handleDeleteAppointment = (id) => {
-    setAppointments(appointments.filter((apt) => apt.id !== id));
+  const handleDeleteAppointment = async (id) => {
+    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`http://localhost:5000/api/appointments/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete appointment");
+      }
+
+      setAppointments(appointments.filter((apt) => apt._id !== id));
+    } catch (err) {
+      console.error("Error deleting appointment:", err);
+      alert("Failed to cancel appointment");
+    }
   };
 
   const getStatusColor = (status) => {
@@ -105,7 +155,13 @@ export default function Calendar() {
 
       {/* Appointments List */}
       <div className="space-y-4">
-        {appointments.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-red-400 text-center py-8">{error}</div>
+        ) : appointments.length === 0 ? (
           <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 rounded-xl p-12 text-center">
             <CalendarIcon className="w-16 h-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400">No appointments scheduled</p>
@@ -116,7 +172,7 @@ export default function Calendar() {
         ) : (
           appointments.map((appointment) => (
             <div
-              key={appointment.id}
+              key={appointment._id}
               className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 rounded-xl p-6 hover:border-blue-500/50 transition-all"
             >
               <div className="flex items-start justify-between">
@@ -174,7 +230,7 @@ export default function Calendar() {
                 </div>
 
                 <button
-                  onClick={() => handleDeleteAppointment(appointment.id)}
+                  onClick={() => handleDeleteAppointment(appointment._id)}
                   className="text-gray-400 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-lg transition-all"
                 >
                   <X className="w-5 h-5" />
@@ -281,9 +337,10 @@ export default function Calendar() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleAddAppointment}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-all hover:scale-105"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Add Appointment
+                  {isSubmitting ? "Scanning..." : "Add Appointment"}
                 </button>
                 <button
                   onClick={() => setShowAddModal(false)}

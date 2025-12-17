@@ -6,6 +6,7 @@ import Profile from "./pages/Profile";
 import Documents from "./pages/Documents";
 import Chatbot from "./pages/Chatbot";
 import Calendar from "./pages/Calendar";
+import RiskAssessment from "./pages/RiskAssessment";
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="documents" element={<Documents />} />
           <Route path="chatbot" element={<Chatbot />} />
+          <Route path="risk-assessment" element={<RiskAssessment />} />
           <Route path="calendar" element={<Calendar />} />
         </Route>
 

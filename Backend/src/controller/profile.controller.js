@@ -210,9 +210,15 @@ export const generateSummary = async (req, res) => {
       Ensure the tone is professional, clinical, and suitable for a doctor to read quickly.
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
+    let summary = "Summary generation unavailable.";
+    try {
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      summary = response.text();
+    } catch (aiError) {
+      console.error("AI Generation Error:", aiError);
+      summary = "AI Summary generation failed due to technical issues. Please consult your uploaded documents directly.";
+    }
 
     // SAVE THE REPORT TO DB
     const newReport = await SbarReport.create({
@@ -228,9 +234,7 @@ export const generateSummary = async (req, res) => {
     });
   } catch (error) {
     console.error("Generate Summary Error:", error);
-    console.error("Error Name:", error.name);
-    console.error("Error Message:", error.message);
-    
+
     return res.status(500).json({
       success: false,
       message: `Failed to generate summary: ${error.message}`
@@ -246,7 +250,7 @@ export const generateSummary = async (req, res) => {
 export const getSbarReports = async (req, res) => {
   try {
     const clerkUserId = req.auth.userId;
-    
+
     // Fetch reports, sorted by newest first
     const reports = await SbarReport.find({ clerkUserId })
       .sort({ createdAt: -1 });
